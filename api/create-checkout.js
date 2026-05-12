@@ -14,11 +14,15 @@ module.exports = async function handler(req, res) {
     params.append("mode", "payment");
     params.append("success_url", "https://fusionputtercompany.com/success");
     params.append("cancel_url", "https://fusionputtercompany.com/cart");
+    params.append("automatic_tax[enabled]", "true");
+    params.append("shipping_address_collection[allowed_countries][0]", "US");
 
     cart.forEach((item, i) => {
       params.append(`line_items[${i}][price_data][currency]`, "usd");
       params.append(`line_items[${i}][price_data][product_data][name]`, item.name || "Fusion Putter");
+      params.append(`line_items[${i}][price_data][product_data][description]`, item.description || "");
       params.append(`line_items[${i}][price_data][unit_amount]`, String(Math.round(item.price)));
+      params.append(`line_items[${i}][price_data][tax_behavior]`, "exclusive");
       params.append(`line_items[${i}][quantity]`, String(item.quantity || 1));
     });
 
