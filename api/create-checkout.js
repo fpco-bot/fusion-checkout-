@@ -1,45 +1,47 @@
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  try {
-    const { cart } = req.body;
-    if (!cart || !cart.length) return res.status(400).json({ error: "Cart is empty" });
+  const { cart } = req.body;
+  if (!cart || cart.length === 0) return res.status(400).json({ error: "Cart is empty" });
 
-    const params = new URLSearchParams();
-    params.append("mode", "payment");
-    params.append("success_url", "https://fusionputtercompany.com/success");
-    params.append("cancel_url", "https://fusionputtercompany.com/cart");
-    params.append("automatic_tax[enabled]", "true");
-    params.append("shipping_address_collection[allowed_countries][0]", "US");
+  const secret = process.env.STRIPE_SECRET_KEY;
 
-    cart.forEach((item, i) => {
-      params.append(`line_items[${i}][price_data][currency]`, "usd");
-      params.append(`line_items[${i}][price_data][product_data][name]`, item.name || "Fusion Putter");
-      params.append(`line_items[${i}][price_data][product_data][description]`, item.description || "");
-      params.append(`line_items[${i}][price_data][unit_amount]`, String(Math.round(item.price)));
-      params.append(`line_items[${i}][price_data][tax_behavior]`, "exclusive");
-      params.append(`line_items[${i}][quantity]`, String(item.quantity || 1));
-    });
+  const params = new URLSearchParams();
+  params.append("mode", "payment");
+  params.append("success_url", "https://fusionputtercompany.com/success");
+  params.append("cancel_url", "https://fusionputtercompany.com/cart");
+  params.append("automatic_tax[enabled]", "true");
+  params.append("shipping_address_collection[allowed_countries][0]", "US");
 
-    const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
+  cart.forEach((item, i) => {
+    params.append(`line_items[${i}][price_data][currency]`, "usd");
+    params.append(`line_items[${i}][price_data][product_data][name]`, item.name);
+    params.append(`line_items[${i}][price_data][product_data][description]`, item.description || "");
+    params.append(`line_items[${i}][price_data][tax_behavior]`, "exclusive");
+    params.append(`line_items[${i}][price_data][unit_amount]`, String(item.price));
+    params.append(`line_items[${i}][quantity]`, String(item.quantity));
+  });
 
-    const data = await stripeRes.json();
-    if (!stripeRes.ok) return res.status(500).json({ error: data.error?.message || "Stripe error" });
+  // Attach full order config as metadata (visible in Stripe Dashboard)
+  cart.forEach((item, i) => {
+    params.append(`metadata[item_${i + 1}]`, item.description || item.name);
+  });
 
-    res.json({ url: data.url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  });
+
+  const data = await response.json();
+  if (!response.ok) return res.status(500).json({ error: data.error?.message || "Stripe error" });
+
+  return res.status(200).json({ url: data.url });
+}
